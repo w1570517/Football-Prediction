@@ -1,0 +1,68 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Football Predictor Pro</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .form-container { background: #f5f5f5; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        select, button { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #4CAF50; color: white; cursor: pointer; }
+        .result { margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 4px; }
+        .prob-bar { height: 20px; background: #ddd; margin-top: 5px; border-radius: 3px; overflow: hidden; }
+        .prob-fill { height: 100%; background: #4CAF50; width: 0%; transition: width 0.5s; }
+    </style>
+</head>
+<body>
+    <h1>Football Match Predictor</h1>
+    <div class="form-container">
+        <form method="POST">
+            <div class="form-group">
+                <label for="home_team">Home Team:</label>
+                <select id="home_team" name="home_team" required>
+                    <option value="">Select Home Team</option>
+                    {% for team in teams %}
+                        <option value="{{ team }}" {% if home_team == team %}selected{% endif %}>{{ team }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="away_team">Away Team:</label>
+                <select id="away_team" name="away_team" required>
+                    <option value="">Select Away Team</option>
+                    {% for team in teams %}
+                        <option value="{{ team }}" {% if away_team == team %}selected{% endif %}>{{ team }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="model_type">Model Type:</label>
+                <select id="model_type" name="model_type">
+                    <option value="rf" {% if model_type == 'rf' %}selected{% endif %}>Random Forest</option>
+                    <option value="nn" {% if model_type == 'nn' %}selected{% endif %}>Neural Network</option>
+                </select>
+            </div>
+            <button type="submit">Predict Outcome</button>
+        </form>
+        
+        {% if result %}
+        <div class="result">
+            <h2>{{ home_team }} vs {{ away_team }}</h2>
+            <p><strong>Prediction:</strong> {{ result.prediction }}</p>
+            <p><strong>Model:</strong> {{ result.model_type }}</p>
+            <h3>Probabilities:</h3>
+            {% for outcome, prob in result.probabilities.items() %}
+                <div>
+                    <span>{{ outcome }}: {{ prob }}</span>
+                    <div class="prob-bar">
+                        <div class="prob-fill" style="width: {{ prob }}"></div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>
