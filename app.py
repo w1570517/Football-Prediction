@@ -194,11 +194,15 @@ def train_random_forest(X, y):
     accuracy = model.score(X_test_selected, y_test)
     print(f"Random Forest Accuracy: {accuracy:.4f}")
     
+    # Calculate calibration data
+    calibration_data = calculate_calibration(model, X_test_selected, y_test)
+    
     return {
         'model': model,
         'scaler': scaler,
         'selector': selector,
-        'accuracy': accuracy
+        'accuracy': accuracy,
+        'calibration': calibration_data
     }
 
 def train_neural_network(X, y):
@@ -252,13 +256,69 @@ def train_neural_network(X, y):
     _, accuracy = model.evaluate(X_test_selected, y_test_encoded, verbose=0)
     print(f"Neural Network Accuracy: {accuracy:.4f}")
     
+    # Calculate calibration data
+    calibration_data = calculate_calibration(model, X_test_selected, y_test, is_nn=True, label_encoder=label_encoder)
+    
     return {
         'model': model,
         'scaler': scaler,
         'selector': selector,
         'label_encoder': label_encoder,
-        'accuracy': accuracy
+        'accuracy': accuracy,
+        'calibration': calibration_data
     }
+
+def calculate_calibration(model, X, y_true, is_nn=False, label_encoder=None):
+    """Calculate model calibration by binning predictions and comparing to actual outcomes"""
+    # Make predictions
+    if is_nn:
+        y_pred_probs = model.predict(X, verbose=0)
+        if label_encoder:
+            y_pred = label_encoder.inverse_transform(np.argmax(y_pred_probs, axis=1))
+    else:
+        y_pred_probs = model.predict_proba(X)
+        y_pred = model.classes_[np.argmax(y_pred_probs, axis=1)]
+    
+    # For each class, create calibration data
+    calibration_data = {}
+    
+    if is_nn and label_encoder:
+        classes = label_encoder.classes_
+    else:
+        classes = model.classes_
+    
+    for i, cls in enumerate(classes):
+        # Get probabilities for this class
+        prob_true = y_pred_probs[:, i]
+        
+        # Bin probabilities
+        bins = np.linspace(0, 1, 11)  # 0.0-0.1, 0.1-0.2, ..., 0.9-1.0
+        bin_indices = np.digitize(prob_true, bins) - 1
+        
+        # Calculate actual fraction of positives in each bin
+        actual_probs = []
+        bin_counts = []
+        y_true_cls = (y_true == cls)
+        
+        for bin_idx in range(len(bins) - 1):
+            mask = (bin_indices == bin_idx)
+            if np.sum(mask) > 0:
+                actual_prob = np.mean(y_true_cls[mask])
+                actual_probs.append(actual_prob)
+                bin_counts.append(np.sum(mask))
+            else:
+                actual_probs.append(np.nan)
+                bin_counts.append(0)
+        
+        # Store calibration data for this class
+        calibration_data[cls] = {
+            'bins': bins[:-1] + 0.05,  # Use bin centers
+            'predicted': bins[:-1] + 0.05,
+            'actual': actual_probs,
+            'counts': bin_counts
+        }
+    
+    return calibration_data
 
 # ==================== PREDICTION HANDLING ====================
 
@@ -312,11 +372,30 @@ def predict_match(home_team, away_team, model_type='rf'):
         # Format results
         outcome_mapping = {'H': f"{home_team} win", 'D': "Draw", 'A': f"{away_team} win"}
         
+        # Get reliability information for each outcome
+        reliability = {}
+        calibration = model_info['calibration']
+        
+        for cls, prob in zip(classes, probabilities):
+            if cls in calibration:
+                # Find the closest bin
+                bin_idx = np.digitize(prob, calibration[cls]['bins']) - 1
+                if 0 <= bin_idx < len(calibration[cls]['actual']):
+                    actual_prob = calibration[cls]['actual'][bin_idx]
+                    if not np.isnan(actual_prob):
+                        reliability[outcome_mapping[cls]] = {
+                            'predicted_prob': prob,
+                            'actual_prob': actual_prob,
+                            'reliability': f"{actual_prob:.1%}",
+                            'count': calibration[cls]['counts'][bin_idx]
+                        }
+        
         return {
             'prediction': outcome_mapping[prediction],
             'probabilities': {outcome_mapping[cls]: f"{prob:.1%}" 
                              for cls, prob in zip(classes, probabilities)},
-            'model_type': 'Random Forest' if model_type == 'rf' else 'Neural Network'
+            'model_type': 'Random Forest' if model_type == 'rf' else 'Neural Network',
+            'reliability': reliability
         }
     except Exception as e:
         print(f"Prediction error: {str(e)}")
@@ -400,7 +479,7 @@ if __name__ == '__main__':
     # Create templates directory
     os.makedirs('templates', exist_ok=True)
     
-    # Create basic HTML template
+    # Create basic HTML template with reliability information
     with open('templates/index.html', 'w') as f:
         f.write('''
 <!DOCTYPE html>
@@ -417,6 +496,11 @@ if __name__ == '__main__':
         .result { margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 4px; }
         .prob-bar { height: 20px; background: #ddd; margin-top: 5px; border-radius: 3px; overflow: hidden; }
         .prob-fill { height: 100%; background: #4CAF50; width: 0%; transition: width 0.5s; }
+        .reliability { margin-top: 15px; padding: 10px; background: #e3f2fd; border-radius: 4px; }
+        .reliability-item { margin-bottom: 8px; }
+        .reliability-label { font-weight: bold; }
+        .reliability-value { color: #1976d2; }
+        .reliability-note { font-size: 0.9em; color: #666; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -465,6 +549,24 @@ if __name__ == '__main__':
                     </div>
                 </div>
             {% endfor %}
+            
+            <div class="reliability">
+                <h3>Model Reliability Analysis</h3>
+                <p class="reliability-note">Based on historical predictions with similar confidence levels:</p>
+                {% for outcome, data in result.reliability.items() %}
+                    <div class="reliability-item">
+                        <span class="reliability-label">{{ outcome }}:</span>
+                        <span class="reliability-value">
+                            Model predicted {{ "%.1f"|format(data.predicted_prob * 100) }}%, 
+                            actual outcome was {{ data.reliability }} (based on {{ data.count }} similar predictions)
+                        </span>
+                    </div>
+                {% endfor %}
+                <p class="reliability-note">
+                    A well-calibrated model would have predicted probabilities matching actual outcomes.
+                    Differences indicate areas where the model may be overconfident or underconfident.
+                </p>
+            </div>
         </div>
         {% endif %}
     </div>

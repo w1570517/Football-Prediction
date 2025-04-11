@@ -13,6 +13,11 @@
         .result { margin-top: 20px; padding: 15px; background: #e8f5e9; border-radius: 4px; }
         .prob-bar { height: 20px; background: #ddd; margin-top: 5px; border-radius: 3px; overflow: hidden; }
         .prob-fill { height: 100%; background: #4CAF50; width: 0%; transition: width 0.5s; }
+        .reliability { margin-top: 15px; padding: 10px; background: #e3f2fd; border-radius: 4px; }
+        .reliability-item { margin-bottom: 8px; }
+        .reliability-label { font-weight: bold; }
+        .reliability-value { color: #1976d2; }
+        .reliability-note { font-size: 0.9em; color: #666; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -61,6 +66,24 @@
                     </div>
                 </div>
             {% endfor %}
+            
+            <div class="reliability">
+                <h3>Model Reliability Analysis</h3>
+                <p class="reliability-note">Based on historical predictions with similar confidence levels:</p>
+                {% for outcome, data in result.reliability.items() %}
+                    <div class="reliability-item">
+                        <span class="reliability-label">{{ outcome }}:</span>
+                        <span class="reliability-value">
+                            Model predicted {{ "%.1f"|format(data.predicted_prob * 100) }}%, 
+                            actual outcome was {{ data.reliability }} (based on {{ data.count }} similar predictions)
+                        </span>
+                    </div>
+                {% endfor %}
+                <p class="reliability-note">
+                    A well-calibrated model would have predicted probabilities matching actual outcomes.
+                    Differences indicate areas where the model may be overconfident or underconfident.
+                </p>
+            </div>
         </div>
         {% endif %}
     </div>
