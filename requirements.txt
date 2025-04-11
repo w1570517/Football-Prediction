@@ -2,5 +2,5 @@ Flask==2.1.2
 numpy==1.22.3
 pandas==1.4.2
 scikit-learn==1.0.2
-tensorflow==2.8.0
-cython==3.0.12
+tensorflow
+cython
