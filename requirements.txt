@@ -11,5 +11,5 @@ scikit_learn==1.0.2
 scikit_learn==1.1.2
 scikit_learn==0.23.2
 tensorflow==2.8.0
-gunicorn 25.0.1
+gunicorn==25.0.1
 
