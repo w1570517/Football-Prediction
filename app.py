@@ -21,6 +21,11 @@ tf.get_logger().setLevel('ERROR')
 
 app = Flask(__name__)
 
+# Global variables
+models = {}
+team_stats = {}
+MODEL_READY = False
+
 # ==================== DATA SOURCES ====================
 
 URLS = {
@@ -405,6 +410,11 @@ def predict_match(home_team, away_team, model_type='rf'):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    global MODEL_READY
+    
+    if not MODEL_READY:
+        initialize_application()
+    
     if request.method == 'POST':
         home_team = request.form.get('home_team')
         away_team = request.form.get('away_team')
@@ -425,6 +435,11 @@ def index():
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    global MODEL_READY
+    
+    if not MODEL_READY:
+        initialize_application()
+    
     data = request.get_json()
     home_team = data.get('home_team')
     away_team = data.get('away_team')
@@ -443,8 +458,23 @@ def predict():
 # ==================== APPLICATION SETUP ====================
 
 def initialize_application():
-    global models, team_stats
+    global models, team_stats, MODEL_READY
     
+    print("Initializing application...")
+    
+    try:
+        # Try to load pre-trained models first
+        with open('model_data.pkl', 'rb') as f:
+            data = pickle.load(f)
+            models = data['models']
+            team_stats = data['team_stats']
+        print("Loaded pre-trained models")
+        MODEL_READY = True
+        return
+    except Exception as e:
+        print(f"Could not load pre-trained models: {str(e)}")
+    
+    # Fall back to training new models
     print("Loading data...")
     df = load_data(URLS)
     
@@ -464,6 +494,8 @@ def initialize_application():
     with open('model_data.pkl', 'wb') as f:
         pickle.dump({'models': models, 'team_stats': team_stats}, f)
     print("Models trained and saved")
+    
+    MODEL_READY = True
 
 # Graceful shutdown handler
 def handle_shutdown(signum, frame):
@@ -476,12 +508,13 @@ if __name__ == '__main__':
     # Setup graceful shutdown
     signal.signal(signal.SIGINT, handle_shutdown)
     
-    # Create templates directory
+    # Create templates directory if it doesn't exist
     os.makedirs('templates', exist_ok=True)
     
-    # Create basic HTML template with reliability information
-    with open('templates/index.html', 'w') as f:
-        f.write('''
+    # Create basic HTML template if it doesn't exist
+    if not os.path.exists('templates/index.html'):
+        with open('templates/index.html', 'w') as f:
+            f.write('''
 <!DOCTYPE html>
 <html>
 <head>
@@ -575,15 +608,8 @@ if __name__ == '__main__':
 ''')
     
     # Initialize application
-    try:
-        with open('model_data.pkl', 'rb') as f:
-            data = pickle.load(f)
-            models = data['models']
-            team_stats = data['team_stats']
-        print("Loaded pre-trained models")
-    except:
-        print("Training new models...")
-        initialize_application()
+    initialize_application()
     
     # Run app
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 4000))
+    app.run(host="0.0.0.0", port=port)
