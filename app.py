@@ -15,9 +15,16 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 
 # Suppress TensorFlow warnings
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+#import tensorflow as tf
+#tf.get_logger().setLevel('ERROR')
+
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow logs
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Disable GPU
+
 import tensorflow as tf
-tf.get_logger().setLevel('ERROR')
+tf.get_logger().setLevel('ERROR')  # Further silence TF warnings
 
 app = Flask(__name__)
 
