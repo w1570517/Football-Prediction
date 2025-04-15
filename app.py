@@ -10,21 +10,22 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.feature_selection import SelectFromModel
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, InputLayer
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
+import warnings
 
-# Suppress TensorFlow warnings
-#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-#import tensorflow as tf
-#tf.get_logger().setLevel('ERROR')
+# ==================== CONFIGURATION ====================
 
-import os
+# Suppress warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow logs
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # Disable GPU
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', category=UserWarning)
 
 import tensorflow as tf
-tf.get_logger().setLevel('ERROR')  # Further silence TF warnings
+tf.get_logger().setLevel('ERROR')
 
 app = Flask(__name__)
 
@@ -81,17 +82,17 @@ def preprocess_data(df):
     # Select and validate essential columns
     essential_cols = ['Date', 'HomeTeam', 'AwayTeam', 'FTHG', 'FTAG', 'FTR', 'HS', 'AS', 'HST', 'AST', 'HC', 'AC', 'HF', 'AF', 'HY', 'AY', 'HR', 'AR']
     available_cols = [col for col in essential_cols if col in df.columns]
-    df = df.loc[:, available_cols + ['League']]
+    df = df[available_cols + ['League']].copy()
     
     # Fill numeric columns safely
     numeric_cols = df.select_dtypes(include=np.number).columns
-    df.loc[:, numeric_cols] = df[numeric_cols].fillna(0)
+    df[numeric_cols] = df[numeric_cols].fillna(0)
     
     # Convert categorical columns safely
     categorical_cols = ['HomeTeam', 'AwayTeam', 'FTR', 'League']
     for col in categorical_cols:
         if col in df.columns:
-            df.loc[:, col] = pd.Categorical(df[col])
+            df[col] = pd.Categorical(df[col])  # Fixed categorical conversion
     
     return df
 
@@ -238,9 +239,10 @@ def train_neural_network(X, y):
     X_train_selected = selector.transform(X_train_scaled)
     X_test_selected = selector.transform(X_test_scaled)
     
-    # Build model
+    # Build model with proper input layer
     model = Sequential([
-        Dense(128, activation='relu', input_shape=(X_train_selected.shape[1],)),
+        InputLayer(input_shape=(X_train_selected.shape[1],)),  # Fixed input layer
+        Dense(128, activation='relu'),
         BatchNormalization(),
         Dropout(0.5),
         Dense(64, activation='relu'),
